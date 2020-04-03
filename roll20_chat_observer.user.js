@@ -6,16 +6,18 @@
 // @match        https://app.roll20.net/editor/
 // ==/UserScript==
 
-window.ROLL20_CHAT_OBSERVER_INITIALIZED = false
+window.ROLL20_CHAT_OBSERVER_INITIALIZED = false;
 
 // ignore the warnings that $ is undefined, roll20 uses jquery
-$(window).on("d20:pageInitialized", () => {
+$(init);
+
+function init() {
     'use strict';
 
     if (window.ROLL20_CHAT_OBSERVER_INITIALIZED) return;
 
     console.log("ROLL20_CHAT_OBSERVER_INITIALIZED");
-    window.ROLL20_CHAT_OBSERVER_INITIALIZED = true
+    window.ROLL20_CHAT_OBSERVER_INITIALIZED = true;
 
     var observer = new MutationObserver(records => {
         records.forEach(function (record) {
@@ -33,9 +35,18 @@ $(window).on("d20:pageInitialized", () => {
         });
     });
 
+    setupObserver(observer);
+}
+
+
+function setupObserver(observer) {
     var targetNode = $("#textchat")[0];
-    observer.observe(targetNode, { childList: true, subtree: true });
-});
+    if (targetNode) {
+        observer.observe(targetNode, { childList: true, subtree: true });
+    } else {
+        setTimeout(() => setupObserver(observer), 500);
+    }
+}
 
 function patchRollTemplate(node) {
     var result = node.find("span.inlinerollresult.showtip").first(); // first ist always the roll

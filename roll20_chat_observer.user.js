@@ -6,45 +6,37 @@
 // @match        https://app.roll20.net/editor/
 // ==/UserScript==
 
-window.ROLL20_CHAT_OBSERVER_INITIALIZED = false;
-
 // ignore the warnings that $ is undefined, roll20 uses jquery
 $(init);
 
 function init() {
-    'use strict';
-
-    if (window.ROLL20_CHAT_OBSERVER_INITIALIZED) return;
-
-    console.log("ROLL20_CHAT_OBSERVER_INITIALIZED");
-    window.ROLL20_CHAT_OBSERVER_INITIALIZED = true;
-
-    var observer = new MutationObserver(records => {
-        records.forEach(function (record) {
-            var list = record.addedNodes;
-            var i = list.length - 1;
-
-            for ( ; i > -1; i-- ) {
-                var rolltemplate = $(list[i]).find(".sheet-rolltemplate-splittermond_generic, .sheet-rolltemplate-splittermond_aktiveabwehr");
-                console.log("new message: ", list[i], !!rolltemplate.length);
-                if (rolltemplate.length) {
-                    console.log("patching message");
-                    patchRollTemplate(rolltemplate.first());
-                }
-            }
-        });
-    });
-
-    setupObserver(observer);
-}
-
-
-function setupObserver(observer) {
     var targetNode = $("#textchat")[0];
     if (targetNode) {
-        observer.observe(targetNode, { childList: true, subtree: true });
+        var observer = new MutationObserver(records => {
+            records.forEach(record => {
+                var list = record.addedNodes;
+                var i = list.length - 1;
+
+                for ( ; i > -1; i-- ) {
+                    var message = $(list[i]);
+                    if (message.is(".message")) {
+                        console.log("new message: ", list[i]);
+                        var rolltemplate = message.find(".sheet-rolltemplate-splittermond_generic, .sheet-rolltemplate-splittermond_aktiveabwehr");
+                        if (rolltemplate.length) {
+                            console.log("patching message");
+                            patchRollTemplate(rolltemplate.first());
+                        } else if (message.is(".rollresult")) {
+                            console.log("patching message");
+                            patchRawRoll(message);
+                        }
+                    }
+                }
+            });
+        });
+        observer.observe(targetNode, { childList: true, subtree: true });;
+        console.log("ROLL20_CHAT_OBSERVER_INITIALIZED");
     } else {
-        setTimeout(() => setupObserver(observer), 500);
+        setTimeout(init, 500);
     }
 }
 
@@ -119,4 +111,43 @@ function removeExtraRows(node) {
     if (!lastRow.text().trim()) {
         lastRow.remove();
     }
+}
+
+function patchRawRoll(node) {
+    var formula = node.children(".formula:not(.formattedformula)").text();
+    var result = +node.children(".rolled").text();
+    console.debug(formula);
+    if (formula.match(/rolling 4d10kh?2.*/)) {
+        // risk roll
+        console.debug("risk roll");
+        var dropped = node.find(".formula.formattedformula .dicegrouping .diceroll.dropped .dicon .didroll");
+        var total = +dropped.first().text() + +dropped.last().text();
+        if (total <= 3) {
+            addExtraToRawRoll(node, true);
+        } else if (result >= 19) {
+            addExtraToRawRoll(node, false);
+        }
+    } else if (formula.match(/rolling 2d10.*/)) {
+        // normal roll
+        console.debug("normal roll");
+        if (result <= 3) {
+            addExtraToRawRoll(node, true);
+        } else if (result >= 19) {
+            addExtraToRawRoll(node, false);
+        }
+    }
+}
+
+function addExtraToRawRoll(node, fail) {
+    var color = fail ? "red" : "green";
+    var text = fail ? "PATZER!" : "TRIUMPH!";
+
+    var field = $("<span>");
+    field.css({
+        "font-size": "1.4em",
+        "margin-left": "15px",
+        "color": color
+    });
+    field.text(text);
+    node.append(field);
 }

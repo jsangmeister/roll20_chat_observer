@@ -115,12 +115,14 @@ function removeExtraRows(node) {
 
 function patchRawRoll(node) {
     var formula = node.children(".formula:not(.formattedformula)").text();
-    var result = +node.children(".rolled").text();
-    console.debug(formula);
+    var rolls = node.find(".formula.formattedformula .dicegrouping .diceroll")
+    var potentialSuccessRolls = rolls.filter(":not(.dropped)").find(".dicon .didroll");
+    var result = +potentialSuccessRolls.first().text() + +potentialSuccessRolls.last().text();
+    console.debug(formula, result);
     if (formula.match(/rolling 4d10kh?2.*/)) {
         // risk roll
         console.debug("risk roll");
-        var dropped = node.find(".formula.formattedformula .dicegrouping .diceroll.dropped .dicon .didroll");
+        var dropped = rolls.filter(".dropped").find(".dicon .didroll");
         var total = +dropped.first().text() + +dropped.last().text();
         if (total <= 3) {
             addExtraToRawRoll(node, true);

@@ -7,7 +7,14 @@
 // ==/UserScript==
 
 // ignore the warnings that $ is undefined, roll20 uses jquery
-$(init);
+window.onload = function waitForJQuery() {
+    // wait for jquery
+    if (typeof $ !== 'undefined') {
+        init();
+    } else {
+        setTimeout(waitForJQuery, 100);
+    }
+};
 
 function init() {
     var targetNode = $("#textchat")[0];

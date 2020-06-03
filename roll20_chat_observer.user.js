@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         Roll20 Chat Observer for Splittermond
-// @version      1.0
+// @version      1.1
 // @description  replaces fails and triumphs in the roll20 chat accordingly
 // @author       Joshua Sangmeister
 // @match        https://app.roll20.net/editor/
@@ -48,13 +48,14 @@ function init() {
 }
 
 function patchRollTemplate(node) {
-    var result = node.find("span.inlinerollresult.showtip").first(); // first ist always the roll
-    var tooltip = result.attr("title") || result.attr("original-title");
+    var inlineRollResults = node.find("span.inlinerollresult.showtip");
+    var resultNode = inlineRollResults.first(); // first ist always the roll
+    var tooltip = resultNode.attr("title") || resultNode.attr("original-title");
     var html = $(tooltip);
     var rolls = html.filter(".basicdiceroll");
     var dropped = rolls.filter(".dropped");
 
-    result.removeClass("fullfail fullcrit importantroll");
+    resultNode.removeClass("fullfail fullcrit importantroll");
     if (rolls.length === 2 && dropped.length === 1) {
         removeExtraRows(node);
         return;
@@ -66,25 +67,32 @@ function patchRollTemplate(node) {
     } else {
         maybeFailRolls = dropped;
     }
-    var total = +maybeFailRolls.first().text() + +maybeFailRolls.last().text();
+    var failTotal = +maybeFailRolls.first().text() + +maybeFailRolls.last().text();
 
-    if (total <= 3) {
+    var maybeTriumphRolls = rolls.filter(":not(.dropped)");
+    var successTotal = +maybeTriumphRolls.first().text() + +maybeTriumphRolls.last().text();
+
+    if (failTotal <= 3) {
         addOrReplaceLastRow(node, true);
+        if (rolls.length == 4) {
+            updateFailedRollResult(rolls, resultNode, failTotal - successTotal);
+        }
+        updateEGs(node, resultNode, true);
+    } else if (successTotal >= 19) {
+        addOrReplaceLastRow(node, false);
+        updateEGs(node, resultNode, false);
     } else {
-        var maybeTriumphRolls;
-        if (rolls.length === 2) {
-            maybeTriumphRolls = rolls;
-        } else {
-            maybeTriumphRolls = rolls.filter(":not(.dropped)");
-        }
-        total = +maybeTriumphRolls.first().text() + +maybeTriumphRolls.last().text();
-
-        if (total >= 19) {
-            addOrReplaceLastRow(node, false);
-        } else {
-            removeExtraRows(node);
-        }
+        removeExtraRows(node);
     }
+}
+
+function updateEGs(node, resultNode, fail) {
+    var difficulty = +node.find("tr:contains('Schwierigkeit') td:nth(1) b").text();
+    var newResult = +resultNode.text();
+    var diff = newResult - difficulty;
+    var eg = Math.sign(diff) * Math.floor(Math.abs(diff) / 3) - Math.sign(fail) * 6 + 3; // +3 for success, -3 for fail
+    var egNode = node.find("tr:contains('Erfolgsgrade') td:nth(1) b");
+    egNode.text(eg);
 }
 
 function addOrReplaceLastRow(node, fail) {
@@ -120,10 +128,24 @@ function removeExtraRows(node) {
     }
 }
 
+function updateFailedRollResult(rolls, resultNode, diff) {
+    console.log(rolls, resultNode, diff);
+    var droppedRolls = rolls.filter(".dropped");
+    var notDroppedRolls = rolls.filter(":not(.dropped)");
+    droppedRolls.removeClass("dropped");
+    notDroppedRolls.addClass("dropped");
+    var full = +resultNode.text();
+    var newFull = full + diff;
+    resultNode.text(newFull);
+}
+
 function patchRawRoll(node) {
     var formula = node.children(".formula:not(.formattedformula)").text();
     var rolls = node.find(".formula.formattedformula .dicegrouping .diceroll")
     var potentialSuccessRolls = rolls.filter(":not(.dropped)").find(".dicon .didroll");
+    if (potentialSuccessRolls.length != 2) {
+        return;
+    }
     var result = +potentialSuccessRolls.first().text() + +potentialSuccessRolls.last().text();
     console.debug(formula, result);
     if (formula.match(/rolling 4d10kh?2.*/)) {
@@ -133,6 +155,8 @@ function patchRawRoll(node) {
         var total = +dropped.first().text() + +dropped.last().text();
         if (total <= 3) {
             addExtraToRawRoll(node, true);
+            // patch roll result to reflect the fail
+            updateFailedRollResult(rolls, node.children(".rolled"), total - result);
         } else if (result >= 19) {
             addExtraToRawRoll(node, false);
         }
